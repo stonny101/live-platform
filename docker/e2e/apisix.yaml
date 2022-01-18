@@ -1,0 +1,69 @@
+routes:
+  -
+    uri: /*
+    vars:
+      - - server_port
+        - "=="
+        - '5445'
+    plugins:
+      proxy-rewrite:
+        headers:
+          sw8-correlation: Y3lib3JnLWZsb3c=:dHJ1ZQ==
+      skywalking:
+        sample_ratio: 1
+    upstream:
+      nodes:
+        "spp-platform:5445": 1
+      type: roundrobin
+  -
+    uri: /*
+    vars:
+      - - server_port
+        - "=="
+        - '11800'
+    upstream:
+      scheme: "grpc"
+      nodes:
+        "skywalking-oap:11800": 1
+      type: roundrobin
+  -
+    uri: /*
+    vars:
+      - - server_port
+        - "=="
+        - '12800'
+    upstream:
+      nodes:
+        "skywalking-oap:12800": 1
+      type: roundrobin
+
+stream_routes:
+  -
+    server_port: 5450
+    id: 1
+    upstream:
+      nodes:
+        "spp-platform:5450": 1
+      type: roundrobin
+  -
+    server_port: 5455
+    id: 2
+    upstream:
+      nodes:
+        "spp-platform:5455": 1
+      type: roundrobin
+  -
+    server_port: 5460
+    id: 3
+    upstream:
+      nodes:
+        "spp-platform:5460": 1
+      type: roundrobin
+#  -
+#    server_port: 11800
+#    id: 4
+#    upstream:
+#      nodes:
+#        "skywalking-oap:11800": 1
+#      type: roundrobin
+#END

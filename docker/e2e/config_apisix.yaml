@@ -1,0 +1,29 @@
+apisix:
+  config_center: yaml
+  enable_admin: false
+  node_listen:
+    - 5445
+    - port: 11800
+      enable_http2: true
+    - 12800
+  stream_proxy:
+    only: false
+    tcp:
+      - 5450
+      - 5455
+      - 5460
+
+  admin_key:
+    - name: admin
+      key: edd1c9f034335f136f87ad84b625c8f1 # todo: change
+      role: admin
+
+plugins:
+  - proxy-rewrite
+  - skywalking
+
+plugin_attr:
+  skywalking:
+    service_name: APISIX
+    service_instance_name: "APISIX Instance Name"
+    endpoint_addr: http://skywalking-oap:12800

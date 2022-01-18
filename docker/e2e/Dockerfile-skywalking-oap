@@ -17,14 +17,14 @@ ADD ./config/spp-platform.crt /skywalking
 ADD ./config/spp-platform.key /skywalking
 
 #ENV SPP_PLATFORM_SSL_TRUST_ALL=true
-ENV SPP_PLATFORM_HOST=spp-platform
+ENV SPP_PLATFORM_HOST=apisix
 ENV SPP_PLATFORM_PORT=5460
-ENV SPP_PLATFORM_CERTIFICATE_FILE=/skywalking/spp-platform.crt
+#ENV SPP_PLATFORM_CERTIFICATE_FILE=/skywalking/spp-platform.crt
 
-ENV SW_CORE_GRPC_SSL_ENABLED=true
-ENV SW_CORE_GRPC_SSL_KEY_PATH=/skywalking/spp-platform.key
-ENV SW_CORE_GRPC_SSL_CERT_CHAIN_PATH=/skywalking/spp-platform.crt
-ENV SW_CORE_GRPC_SSL_TRUSTED_CA_PATH=/skywalking/spp-platform.crt
-ENV SW_RECEIVER_GRPC_SSL_ENABLED=true
-ENV SW_RECEIVER_GRPC_SSL_KEY_PATH=/skywalking/spp-platform.key
-ENV SW_RECEIVER_GRPC_SSL_CERT_CHAIN_PATH=/skywalking/spp-platform.crt
+#ENV SW_CORE_GRPC_SSL_ENABLED=false
+#ENV SW_CORE_GRPC_SSL_KEY_PATH=/skywalking/spp-platform.key
+#ENV SW_CORE_GRPC_SSL_CERT_CHAIN_PATH=/skywalking/spp-platform.crt
+#ENV SW_CORE_GRPC_SSL_TRUSTED_CA_PATH=/skywalking/spp-platform.crt
+#ENV SW_RECEIVER_GRPC_SSL_ENABLED=false
+#ENV SW_RECEIVER_GRPC_SSL_KEY_PATH=/skywalking/spp-platform.key
+#ENV SW_RECEIVER_GRPC_SSL_CERT_CHAIN_PATH=/skywalking/spp-platform.crt
