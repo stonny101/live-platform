@@ -18,5 +18,11 @@ storage:
     port: ${SPP_REDIS_PORT:-6379}
 
 skywalking-oap:
-  host: ${SPP_OAP_HOST:-localhost}
-  port: ${SPP_OAP_PORT:-12800}
+  grpc:
+    host: ${SPP_OAP_GRPC_HOST:-localhost}
+    port: ${SPP_OAP_GRPC_PORT:-11800}
+    public_port: ${SPP_OAP_GRPC_PUBLIC_PORT:-11800}
+  rest:
+    host: ${SPP_OAP_REST_HOST:-localhost}
+    port: ${SPP_OAP_REST_PORT:-12800}
+    public_port: ${SPP_OAP_REST_PUBLIC_PORT:-12800}

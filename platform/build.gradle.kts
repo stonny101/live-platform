@@ -73,6 +73,7 @@ subprojects {
         implementation("io.vertx:vertx-lang-kotlin:$vertxVersion")
         implementation("io.vertx:vertx-lang-kotlin-coroutines:$vertxVersion")
         implementation("io.vertx:vertx-web:$vertxVersion")
+        implementation("io.vertx:vertx-http-proxy:$vertxVersion")
         implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion")
         implementation("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:$jacksonVersion")
         implementation("com.fasterxml.jackson.datatype:jackson-datatype-guava:$jacksonVersion")

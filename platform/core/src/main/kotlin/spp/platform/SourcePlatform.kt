@@ -11,8 +11,7 @@ import io.vertx.core.Vertx
 import io.vertx.core.VertxOptions
 import io.vertx.core.buffer.Buffer
 import io.vertx.core.eventbus.ReplyException
-import io.vertx.core.http.HttpMethod
-import io.vertx.core.http.HttpServerOptions
+import io.vertx.core.http.*
 import io.vertx.core.json.Json
 import io.vertx.core.json.JsonArray
 import io.vertx.core.json.JsonObject
@@ -33,6 +32,8 @@ import io.vertx.ext.web.handler.BodyHandler
 import io.vertx.ext.web.handler.JWTAuthHandler
 import io.vertx.ext.web.handler.ResponseTimeHandler
 import io.vertx.ext.web.handler.graphql.GraphQLHandler
+import io.vertx.httpproxy.HttpProxy
+import io.vertx.httpproxy.ProxyRequest
 import io.vertx.kotlin.coroutines.CoroutineVerticle
 import io.vertx.kotlin.coroutines.await
 import io.vertx.kotlin.coroutines.dispatcher
@@ -294,59 +295,6 @@ class SourcePlatform : CoroutineVerticle() {
         router.route("/graphql").handler(BodyHandler.create())
             .handler(GraphQLHandler.create(SourceService.setupGraphQL(vertx)))
 
-        //SkyWalking Graphql
-        val skywalkingHost = config.getJsonObject("skywalking-oap").getString("host")
-        val skywalkingPort = config.getJsonObject("skywalking-oap").getString("port").toInt()
-        val httpClient = vertx.createHttpClient()
-        vertx.eventBus().consumer<JsonObject>("skywalking-forwarder") { req ->
-            val request = req.body()
-            val body = request.getString("body")!!
-            val headers: JsonObject? = request.getJsonObject("headers")
-            val method = HttpMethod.valueOf(request.getString("method"))!!
-            log.trace { msg("Forwarding SkyWalking request: {}", body) }
-
-            GlobalScope.launch(vertx.dispatcher()) {
-                val forward = httpClient.request(
-                    method, skywalkingPort, skywalkingHost, "/graphql"
-                ).await()
-
-                forward.response().onComplete { resp ->
-                    resp.result().body().onComplete {
-                        val respBody = it.result()
-                        log.trace { msg("Forwarding SkyWalking response: {}", respBody.toString()) }
-                        val respOb = JsonObject()
-                        respOb.put("status", resp.result().statusCode())
-                        respOb.put("body", respBody.toString())
-                        req.reply(respOb)
-                    }
-                }
-
-                headers?.fieldNames()?.forEach {
-                    forward.putHeader(it, headers.getValue(it).toString())
-                }
-                forward.end(body).await()
-            }
-        }
-
-        router.route("/graphql/skywalking").handler(BodyHandler.create()).handler { req ->
-            val forward = JsonObject()
-            forward.put("body", req.bodyAsString)
-            val headers = JsonObject()
-            req.request().headers().names().forEach {
-                headers.put(it, req.request().headers().get(it))
-            }
-            forward.put("headers", headers)
-            forward.put("method", req.request().method().name())
-            vertx.eventBus().request<JsonObject>("skywalking-forwarder", forward) {
-                if (it.succeeded()) {
-                    val resp = it.result().body()
-                    req.response().setStatusCode(resp.getInteger("status")).end(resp.getString("body"))
-                } else {
-                    log.error("Failed to forward SkyWalking request", it.cause())
-                }
-            }
-        }
-
         //Health checks
         val checks = HealthChecks.create(vertx)
         addServiceCheck(checks, LIVE_VIEW_PROCESSOR.address)
@@ -463,6 +411,8 @@ class SourcePlatform : CoroutineVerticle() {
             val jksOptions = CertsToJksOptionsConverter(certFile.absolutePath, keyFile.absolutePath).createJksOptions()
             httpOptions.setKeyStoreOptions(jksOptions)
         }
+        setupSkyWalkingProxies(router, httpOptions)
+
         val server = vertx.createHttpServer(httpOptions)
             .requestHandler(router)
             .listen(httpPort, config.getJsonObject("spp-platform").getString("host")).await()
@@ -470,6 +420,113 @@ class SourcePlatform : CoroutineVerticle() {
         log.info("API server started. Port: {}", server.actualPort())
         log.debug("Source++ Platform initialized")
     }
+
+    private fun setupSkyWalkingProxies(router: Router, httpOptions: HttpServerOptions) {
+        val grpcConfig = config.getJsonObject("skywalking-oap").getJsonObject("grpc")
+        val grpcClient = vertx.createHttpClient(
+            HttpClientOptions().setProtocolVersion(HttpVersion.HTTP_2)
+        )
+        val grpcProxy = HttpProxy.reverseProxy(grpcClient)
+        grpcProxy.origin(grpcConfig.getString("port").toInt(), grpcConfig.getString("host"))
+        val grpcProxyServer = vertx.createHttpServer(HttpServerOptions(httpOptions).setUseAlpn(true))
+        grpcProxyServer.requestHandler(grpcProxy).listen(grpcConfig.getString("public_port").toInt())
+
+        val restConfig = config.getJsonObject("skywalking-oap").getJsonObject("rest")
+        val restClient = vertx.createHttpClient(
+            HttpClientOptions().setProtocolVersion(HttpVersion.HTTP_1_1)
+        )
+        val restProxy = HttpProxy.reverseProxy(restClient)
+        restProxy.origin(restConfig.getString("port").toInt(), restConfig.getString("host"))
+        val restProxyServer = vertx.createHttpServer(httpOptions)
+        restProxyServer.requestHandler(restProxy).listen(restConfig.getString("public_port").toInt())
+
+        vertx.eventBus().consumer<JsonObject>("skywalking-forwarder") { req ->
+            val request = req.body()
+            val body = request.getString("body")!!
+            val headers: JsonObject? = request.getJsonObject("headers")
+            val method = HttpMethod.valueOf(request.getString("method"))!!
+            log.trace { msg("Forwarding SkyWalking request: {}", body) }
+
+            GlobalScope.launch(vertx.dispatcher()) {
+                val forward = restClient.request(
+                    method, restConfig.getString("port").toInt(), restConfig.getString("host"), "/graphql"
+                ).await()
+
+                forward.response().onComplete { resp ->
+                    resp.result().body().onComplete {
+                        val respBody = it.result()
+                        log.trace { msg("Forwarding SkyWalking response: {}", respBody.toString()) }
+                        val respOb = JsonObject()
+                        respOb.put("status", resp.result().statusCode())
+                        respOb.put("body", respBody.toString())
+                        req.reply(respOb)
+                    }
+                }
+
+                headers?.fieldNames()?.forEach {
+                    forward.putHeader(it, headers.getValue(it).toString())
+                }
+                forward.end(body).await()
+            }
+        }
+
+        router.route("/graphql/skywalking").handler(BodyHandler.create()).handler { req ->
+            val forward = JsonObject()
+            forward.put("body", req.bodyAsString)
+            val headers = JsonObject()
+            req.request().headers().names().forEach {
+                headers.put(it, req.request().headers().get(it))
+            }
+            forward.put("headers", headers)
+            forward.put("method", req.request().method().name())
+            vertx.eventBus().request<JsonObject>("skywalking-forwarder", forward) {
+                if (it.succeeded()) {
+                    val resp = it.result().body()
+                    req.response().setStatusCode(resp.getInteger("status")).end(resp.getString("body"))
+                } else {
+                    log.error("Failed to forward SkyWalking request", it.cause())
+                }
+            }
+        }
+    }
+
+//    private suspend fun lowLevel(
+//        proxyConfig: JsonObject, proxyServer: HttpServer, proxyClient: HttpClient, jwtAuth: JWTAuth?
+//    ) {
+//        proxyServer.requestHandler { outboundRequest ->
+//            if (jwtAuth != null) {
+//                //authenticate request
+//                val authorization = outboundRequest.headers().filter { it.key.startsWith("Authorization") }
+//                if (authorization.isEmpty()) {
+//                    outboundRequest.body().onComplete {
+//                        val body = it.result()
+//                        log.warn { msg("Request without authorization: {}", body.toString()) }
+//                    }
+//
+//                    outboundRequest.response().setStatusCode(401).end()
+//                    return@requestHandler
+//                } else {
+//                    TODO()
+//                }
+//            }
+//
+//            val proxyRequest = ProxyRequest.reverseProxy(outboundRequest)
+//            proxyClient.request(
+//                proxyRequest.method,
+//                proxyConfig.getString("port").toInt(),
+//                proxyConfig.getString("host"),
+//                proxyRequest.uri
+//            ).compose { inboundRequest: HttpClientRequest -> proxyRequest.send(inboundRequest) }
+//                .onSuccess { it.send() }
+//                .onFailure { err ->
+//                    proxyRequest.release()
+//
+//                    err.printStackTrace()
+//                    outboundRequest.response().setStatusCode(500).send()
+//                }
+//        }
+//        proxyServer.listen(proxyConfig.getString("public_port").toInt()).await()
+//    }
 
     private fun generateSecurityCertificates(keyFile: File, certFile: File) {
         log.info("Generating security certificates")
@@ -482,7 +539,7 @@ class SourcePlatform : CoroutineVerticle() {
 
         val keyPair = SelfSignedCertGenerator.generateKeyPair(4096)
         val certificate = SelfSignedCertGenerator.generate(
-            keyPair, "SHA256WithRSAEncryption", "localhost", 365
+            keyPair, "SHA256WithRSAEncryption", "spp-platform", 365
         )
 
         keyFile.parentFile.mkdirs()
