@@ -8,7 +8,7 @@ routes:
     plugins:
       proxy-rewrite:
         headers:
-          sw8-correlation: Y3lib3JnLWZsb3c=:dHJ1ZQ==
+          sw8-correlation: c291cmNlcGx1c3BsdXM=:dHJ1ZQ==
       skywalking:
         sample_ratio: 1
     upstream:
@@ -59,11 +59,4 @@ stream_routes:
       nodes:
         "spp-platform:5460": 1
       type: roundrobin
-#  -
-#    server_port: 11800
-#    id: 4
-#    upstream:
-#      nodes:
-#        "skywalking-oap:11800": 1
-#      type: roundrobin
 #END
