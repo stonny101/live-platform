@@ -1,4 +1,4 @@
-FROM openjdk:11-jre
+FROM openjdk:21-ea-21-jdk-slim
 ADD ./example-web-app/build/distributions/example-jvm-boot-1.0-SNAPSHOT.zip /example-jvm-boot-1.0-SNAPSHOT.zip
 
 RUN mkdir -p /tmp/spp-probe/ca
